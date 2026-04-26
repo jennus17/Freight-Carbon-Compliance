@@ -1,0 +1,873 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ESG Carbon API",
+    "description": "REST API for calculating logistics carbon footprint (CO2e) in alignment with EU CSRD / ESRS E1 disclosure requirements. Supports DEFRA 2023, 2024 and 2025 vintages; alternative fuels (HVO, SAF, LNG, methanol, electric); regional grid factors; Stripe-style idempotency; and bulk calculation.",
+    "contact": {
+      "name": "ESG Compliance API"
+    },
+    "license": {
+      "name": "Proprietary"
+    },
+    "version": "0.3.0"
+  },
+  "paths": {
+    "/api/v1/emissions/calculate": {
+      "post": {
+        "tags": [
+          "Emissions"
+        ],
+        "summary": "Calculate the carbon footprint of a single shipment",
+        "description": "Calculate CO2-equivalent emissions for a freight shipment.\n\nRefinements available:\n  * `sub_mode` — vehicle/vessel class (e.g. `articulated_average`).\n  * `fuel_type` — alternative fuel pathway (`hvo100`, `saf_neat`, `electric`, ...).\n  * `region` — ISO-3166 code; localises grid factor when `fuel_type='electric'`.\n  * `methodology_version` — pin to a vintage (e.g. `'2023'`) for stable historical reports.\n\nThe full derivation appears in `methodology_reference.resolution_chain`.",
+        "operationId": "calculate_emissions_api_v1_emissions_calculate_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional Stripe-style idempotency key. Same key + same body → cached response (header `Idempotent-Replayed: true`). Same key + different body → 409 Conflict. TTL 24h.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Optional Stripe-style idempotency key. Same key + same body → cached response (header `Idempotent-Replayed: true`). Same key + different body → 409 Conflict. TTL 24h."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmissionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Audit-grade CO2e breakdown with methodology reference.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmissionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emissions/batch": {
+      "post": {
+        "tags": [
+          "Emissions"
+        ],
+        "summary": "Calculate emissions for up to 1000 shipments in one call",
+        "description": "Bulk calculation endpoint. Each item is processed independently —\na single bad row does not fail the whole batch. The aggregate totals\ncover only successful items; failed items appear in `items[]` with\n`status='error'` and a structured error payload.",
+        "operationId": "calculate_batch_api_v1_emissions_batch_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional Stripe-style idempotency key. Same key + same body → cached response (header `Idempotent-Replayed: true`). Same key + different body → 409 Conflict. TTL 24h.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Optional Stripe-style idempotency key. Same key + same body → cached response (header `Idempotent-Replayed: true`). Same key + different body → 409 Conflict. TTL 24h."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-item results with aggregate totals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emissions/modes": {
+      "get": {
+        "tags": [
+          "Emissions"
+        ],
+        "summary": "List supported transport modes and sub-modes",
+        "operationId": "list_modes_api_v1_emissions_modes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object",
+                  "title": "Response List Modes Api V1 Emissions Modes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reference/fuels": {
+      "get": {
+        "tags": [
+          "Reference data"
+        ],
+        "summary": "List fuels compatible with each transport mode",
+        "operationId": "list_fuels_api_v1_reference_fuels_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object",
+                  "title": "Response List Fuels Api V1 Reference Fuels Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reference/regions": {
+      "get": {
+        "tags": [
+          "Reference data"
+        ],
+        "summary": "List supported region codes and their grid factors (kgCO2e/kWh)",
+        "operationId": "list_regions_api_v1_reference_regions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object",
+                  "title": "Response List Regions Api V1 Reference Regions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BatchAggregate": {
+        "properties": {
+          "total_items": {
+            "type": "integer",
+            "title": "Total Items"
+          },
+          "successful": {
+            "type": "integer",
+            "title": "Successful"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "total_co2e_kg": {
+            "type": "number",
+            "title": "Total Co2E Kg"
+          },
+          "total_co2e_tonnes": {
+            "type": "number",
+            "title": "Total Co2E Tonnes"
+          },
+          "by_transport_type_kg_co2e": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "By Transport Type Kg Co2E",
+            "description": "Sum of co2e_kg grouped by transport_type, useful for Scope 3 splits."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_items",
+          "successful",
+          "failed",
+          "total_co2e_kg",
+          "total_co2e_tonnes",
+          "by_transport_type_kg_co2e"
+        ],
+        "title": "BatchAggregate",
+        "description": "Totals across the *successful* items only."
+      },
+      "BatchItem": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "description": "Zero-based index in the original request list."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmissionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchItemError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "status"
+        ],
+        "title": "BatchItem",
+        "description": "One row of the batch response — either a successful result or an error."
+      },
+      "BatchItemError": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Machine-readable error class (e.g. 'IncompatibleFuelError')."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "detail"
+        ],
+        "title": "BatchItemError"
+      },
+      "BatchRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmissionRequest"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Items",
+            "description": "List of shipment requests, 1–1000."
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BatchRequest",
+        "description": "Up to ``MAX_BATCH_ITEMS`` shipments calculated in a single API call."
+      },
+      "BatchResponse": {
+        "properties": {
+          "aggregate": {
+            "$ref": "#/components/schemas/BatchAggregate"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "methodology_version_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Methodology Version Used",
+            "description": "Resolved methodology version actually applied (e.g. '2023')."
+          }
+        },
+        "type": "object",
+        "required": [
+          "aggregate",
+          "items"
+        ],
+        "title": "BatchResponse"
+      },
+      "CalculationBreakdown": {
+        "properties": {
+          "mass_tonnes": {
+            "type": "number",
+            "title": "Mass Tonnes",
+            "description": "weight_kg converted to tonnes."
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "tonne_km": {
+            "type": "number",
+            "title": "Tonne Km",
+            "description": "mass_tonnes × distance_km — the activity metric."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mass_tonnes",
+          "distance_km",
+          "tonne_km"
+        ],
+        "title": "CalculationBreakdown",
+        "description": "Intermediate values to make the result reproducible."
+      },
+      "EmissionRequest": {
+        "properties": {
+          "weight_kg": {
+            "type": "number",
+            "maximum": 1000000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Weight Kg",
+            "description": "Gross shipment weight in kilograms. Must be > 0.",
+            "examples": [
+              1500.0
+            ]
+          },
+          "distance_km": {
+            "type": "number",
+            "maximum": 50000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Distance Km",
+            "description": "Transport distance in kilometres. Must be > 0.",
+            "examples": [
+              420.5
+            ]
+          },
+          "transport_type": {
+            "$ref": "#/components/schemas/TransportType",
+            "description": "Primary transport mode.",
+            "examples": [
+              "truck"
+            ]
+          },
+          "sub_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Mode",
+            "description": "Optional vehicle/vessel sub-classification (e.g. 'articulated_average', 'long_haul', 'electric'). When omitted, a sensible default for the transport_type is applied.",
+            "examples": [
+              "articulated_average"
+            ]
+          },
+          "fuel_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FuelType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional fuel/energy carrier override. When provided, the base activity factor is adjusted by the fuel-substitution ratio (GLEC v3.0 §6.3) — or, for 'electric', by the regional grid factor. Must be compatible with the transport_type (e.g. 'jet_a1' is only valid for 'air').",
+            "examples": [
+              "hvo100"
+            ]
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region",
+            "description": "Optional ISO-3166-1 alpha-2 country code (or 'EU27' / 'WORLD' aggregate, or 'US-CA'-style sub-national code). Used to localise the electricity grid factor when fuel_type='electric'. Ignored for non-electric fuels.",
+            "examples": [
+              "FR"
+            ]
+          },
+          "methodology_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MethodologyVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pin the calculation to a specific methodology vintage. Defaults to the latest published version. Pin to e.g. '2023' to guarantee stable historical results across future DEFRA updates.",
+            "examples": [
+              "2023"
+            ]
+          },
+          "shipment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipment Id",
+            "description": "Optional client-supplied identifier echoed back in the response."
+          }
+        },
+        "type": "object",
+        "required": [
+          "weight_kg",
+          "distance_km",
+          "transport_type"
+        ],
+        "title": "EmissionRequest",
+        "description": "Input for a single shipment carbon-footprint calculation."
+      },
+      "EmissionResponse": {
+        "properties": {
+          "shipment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipment Id"
+          },
+          "transport_type": {
+            "$ref": "#/components/schemas/TransportType"
+          },
+          "co2e_kg": {
+            "type": "number",
+            "title": "Co2E Kg",
+            "description": "Total emissions in kilograms of CO2 equivalent."
+          },
+          "co2e_tonnes": {
+            "type": "number",
+            "title": "Co2E Tonnes",
+            "description": "Total emissions in tonnes of CO2 equivalent."
+          },
+          "calculation": {
+            "$ref": "#/components/schemas/CalculationBreakdown"
+          },
+          "methodology_reference": {
+            "$ref": "#/components/schemas/MethodologyReference"
+          },
+          "calculated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Calculated At",
+            "description": "UTC timestamp of the calculation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "transport_type",
+          "co2e_kg",
+          "co2e_tonnes",
+          "calculation",
+          "methodology_reference",
+          "calculated_at"
+        ],
+        "title": "EmissionResponse",
+        "description": "Carbon-footprint calculation result for a single shipment."
+      },
+      "FuelType": {
+        "type": "string",
+        "enum": [
+          "diesel",
+          "diesel_b7",
+          "hvo100",
+          "biodiesel_b20",
+          "lng",
+          "hfo",
+          "mgo",
+          "jet_a1",
+          "saf_blend_30",
+          "saf_neat",
+          "methanol_grey",
+          "methanol_green",
+          "electric"
+        ],
+        "title": "FuelType",
+        "description": "Operator-specified fuel/energy carrier — overrides the mode default."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
+        "title": "HealthResponse"
+      },
+      "MethodologyReference": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "csrd_alignment": {
+            "type": "string",
+            "title": "Csrd Alignment"
+          },
+          "factor_kg_co2e_per_tkm": {
+            "type": "number",
+            "title": "Factor Kg Co2E Per Tkm",
+            "description": "Final emission factor applied (after any fuel/region adjustments)."
+          },
+          "sub_mode_resolved": {
+            "type": "string",
+            "title": "Sub Mode Resolved",
+            "description": "The sub_mode that was actually applied (after defaulting)."
+          },
+          "fuel_resolved": {
+            "type": "string",
+            "title": "Fuel Resolved",
+            "description": "The fuel/energy carrier the calculation effectively used."
+          },
+          "region_resolved": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Resolved",
+            "description": "The region used for grid-factor lookup, if any."
+          },
+          "resolution_chain": {
+            "items": {
+              "$ref": "#/components/schemas/ResolutionStep"
+            },
+            "type": "array",
+            "title": "Resolution Chain",
+            "description": "Step-by-step derivation of the final factor — base DEFRA factor → fuel substitution → regional grid adjustment. Reproducible by hand."
+          },
+          "extra_references": {
+            "type": "object",
+            "title": "Extra References",
+            "description": "Supplementary methodology fields (e.g. fuel-substitution method, grid source)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "dataset",
+          "scope",
+          "unit",
+          "version",
+          "url",
+          "csrd_alignment",
+          "factor_kg_co2e_per_tkm",
+          "sub_mode_resolved",
+          "fuel_resolved"
+        ],
+        "title": "MethodologyReference",
+        "description": "Auditable provenance of the emission factor used."
+      },
+      "MethodologyVersion": {
+        "type": "string",
+        "enum": [
+          "latest",
+          "2023",
+          "2024",
+          "2025"
+        ],
+        "title": "MethodologyVersion",
+        "description": "Pin the calculation to a specific methodology vintage. ``LATEST`` always\ntracks the most recent published vintage; an explicit year is frozen so\nhistorical CSRD reports stay reproducible across DEFRA updates."
+      },
+      "ResolutionStep": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "title": "Step",
+            "description": "Machine-readable step identifier."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "value_kg_co2e_per_tkm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Kg Co2E Per Tkm"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step",
+          "description"
+        ],
+        "title": "ResolutionStep",
+        "description": "One step in the factor-derivation chain — preserved for auditors."
+      },
+      "TransportType": {
+        "type": "string",
+        "enum": [
+          "truck",
+          "ship",
+          "air",
+          "rail"
+        ],
+        "title": "TransportType"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

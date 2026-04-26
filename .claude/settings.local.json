@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip --version)",
+      "Bash(py --version)",
+      "Bash(py -m pip --version)",
+      "Bash(py -m pip install --quiet --disable-pip-version-check -r requirements.txt)",
+      "Bash(py -m pytest)",
+      "Bash(py -m pip install --quiet --disable-pip-version-check prometheus-client==0.21.0)",
+      "Bash(py scripts/dump_openapi.py)",
+      "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json'\\)\\); print\\(f'OpenAPI {s[\\\\\"openapi\\\\\"]} - {s[\\\\\"info\\\\\"][\\\\\"title\\\\\"]} v{s[\\\\\"info\\\\\"][\\\\\"version\\\\\"]} - {len\\(s[\\\\\"paths\\\\\"]\\)} paths'\\)\")",
+      "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json', encoding='utf-8'\\)\\); print\\(list\\(s['paths'].keys\\(\\)\\)\\)\")"
+    ]
+  }
+}
