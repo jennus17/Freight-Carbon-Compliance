@@ -9,7 +9,18 @@
       "Bash(py -m pip install --quiet --disable-pip-version-check prometheus-client==0.21.0)",
       "Bash(py scripts/dump_openapi.py)",
       "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json'\\)\\); print\\(f'OpenAPI {s[\\\\\"openapi\\\\\"]} - {s[\\\\\"info\\\\\"][\\\\\"title\\\\\"]} v{s[\\\\\"info\\\\\"][\\\\\"version\\\\\"]} - {len\\(s[\\\\\"paths\\\\\"]\\)} paths'\\)\")",
-      "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json', encoding='utf-8'\\)\\); print\\(list\\(s['paths'].keys\\(\\)\\)\\)\")"
+      "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json', encoding='utf-8'\\)\\); print\\(list\\(s['paths'].keys\\(\\)\\)\\)\")",
+      "Bash(curl -sS -i -X GET \"https://freight-carbon-compliance.p.rapidapi.com/api/v1/emissions/modes\" -H \"X-RapidAPI-Host: freight-carbon-compliance.p.rapidapi.com\" -H \"X-RapidAPI-Key: ed8e8168a4mshe55f652d7fe3310p14892cjsn7a9e13b8c840\" --max-time 20)",
+      "Bash(nslookup freight-carbon-compliance.p.rapidapi.com)",
+      "Bash(curl -sS -i -X GET \"https://rapidapi.com\" --max-time 10 -o /dev/null -w \"rapidapi.com base reachable: HTTP %{http_code} in %{time_total}s\\\\n\")",
+      "Bash(curl -sS -i -X GET \"https://freight-carbon-compliance.p.rapidapi.com/api/v1/emissions/modes\" -H \"X-RapidAPI-Host: freight-carbon-compliance.p.rapidapi.com\" -H \"X-RapidAPI-Key: invalid-test-key-deliberately\" --max-time 10 -w \"\\\\n--- Total: %{time_total}s, HTTP %{http_code}\\\\n\")",
+      "Bash(curl -sS -i -X GET \"https://freight-carbon-compliance.p.rapidapi.com/api/v1/emissions/modes\" -H \"X-RapidAPI-Host: freight-carbon-compliance.p.rapidapi.com\" -H \"X-RapidAPI-Key: ed8e8168a4mshe55f652d7fe3310p14892cjsn7a9e13b8c840\" --max-time 90 -w \"\\\\n--- Total: %{time_total}s, HTTP %{http_code}\\\\n\")",
+      "Bash(curl -sS -X GET \"https://freight-carbon-compliance.p.rapidapi.com/api/v1/emissions/modes\" -H \"X-RapidAPI-Host: freight-carbon-compliance.p.rapidapi.com\" -H \"X-RapidAPI-Key: ed8e8168a4mshe55f652d7fe3310p14892cjsn7a9e13b8c840\" --max-time 30)",
+      "Bash(curl -sS -X POST \"https://freight-carbon-compliance.p.rapidapi.com/api/v1/emissions/calculate\" -H \"X-RapidAPI-Host: freight-carbon-compliance.p.rapidapi.com\" -H \"X-RapidAPI-Key: ed8e8168a4mshe55f652d7fe3310p14892cjsn7a9e13b8c840\" -H \"Content-Type: application/json\" -H \"Idempotency-Key: smoketest-001\" -d \"{\\\\\"weight_kg\\\\\":25000,\\\\\"distance_km\\\\\":600,\\\\\"transport_type\\\\\":\\\\\"rail\\\\\",\\\\\"fuel_type\\\\\":\\\\\"electric\\\\\",\\\\\"region\\\\\":\\\\\"FR\\\\\",\\\\\"methodology_version\\\\\":\\\\\"2025\\\\\"}\" --max-time 30)",
+      "Bash(py -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({'co2e_kg':d['co2e_kg'],'transport_type':d['transport_type'],'fuel_resolved':d['methodology_reference']['fuel_resolved'],'region_resolved':d['methodology_reference']['region_resolved'],'factor':d['methodology_reference']['factor_kg_co2e_per_tkm'],'version':d['methodology_reference']['extra_references']['version_resolved'],'chain_steps':[s['step'] for s in d['methodology_reference']['resolution_chain']]},indent=2\\)\\)\")",
+      "Bash(npx --version)",
+      "Bash(npx -y mcp-remote@latest --help)",
+      "Bash(py -c \"import json; s=json.load\\(open\\('openapi.json',encoding='utf-8'\\)\\); ex=s['paths']['/api/v1/emissions/calculate']['post']['requestBody']['content']['application/json'].get\\('examples',{}\\); print\\('Calc request examples:', list\\(ex.keys\\(\\)\\)\\); resp=s['paths']['/api/v1/emissions/calculate']['post']['responses']; print\\('Calc response codes:', list\\(resp.keys\\(\\)\\)\\); print\\('200 examples:', list\\(resp['200']['content']['application/json'].get\\('examples',{}\\).keys\\(\\)\\)\\)\")"
     ]
   }
 }

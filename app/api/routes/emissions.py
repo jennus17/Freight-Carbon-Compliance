@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, Response
+from typing import Annotated, Final
+
+from fastapi import APIRouter, Body, Depends, Header, Response
 
 from app.api.controllers.emissions_controller import EmissionsController
+from app.api.routes._examples import (
+    REQUEST_EXAMPLES_BATCH,
+    REQUEST_EXAMPLES_CALCULATE,
+    RESPONSES_BATCH,
+    RESPONSES_CALCULATE,
+    RESPONSES_FUELS,
+    RESPONSES_MODES,
+    RESPONSES_REGIONS,
+)
 from app.models.emissions import (
     BatchRequest,
     BatchResponse,
@@ -28,20 +39,45 @@ _IDEMPOTENCY_HEADER_DESC = (
 )
 
 
+# Header-value sentinels that some HTTP playgrounds (notably RapidAPI's) send
+# when an optional header is left blank. Treat them as "no key supplied" so
+# the customer doesn't see false 409s on consecutive un-keyed calls.
+_JUNK_IDEMPOTENCY_VALUES: Final[frozenset[str]] = frozenset(
+    {"", "{}", "null", "undefined", "none"}
+)
+
+
+def _normalize_idempotency_key(raw: str | None) -> str | None:
+    """Strip whitespace; map known sentinels (``{}``, ``null``, ...) to ``None``."""
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if stripped.lower() in _JUNK_IDEMPOTENCY_VALUES:
+        return None
+    return stripped
+
+
 @router.post(
     "/calculate",
     response_model=EmissionResponse,
     summary="Calculate the carbon footprint of a single shipment",
     response_description="Audit-grade CO2e breakdown with methodology reference.",
+    responses=RESPONSES_CALCULATE,
 )
 def calculate_emissions(
-    payload: EmissionRequest,
+    payload: Annotated[
+        EmissionRequest,
+        Body(openapi_examples=REQUEST_EXAMPLES_CALCULATE),
+    ],
     response: Response,
-    idempotency_key: str | None = Header(
-        default=None,
-        alias="Idempotency-Key",
-        description=_IDEMPOTENCY_HEADER_DESC,
-    ),
+    idempotency_key: Annotated[
+        str | None,
+        Header(
+            alias="Idempotency-Key",
+            description=_IDEMPOTENCY_HEADER_DESC,
+            examples=["shipment-2026-08821-attempt-1"],
+        ),
+    ] = None,
     controller: EmissionsController = Depends(get_controller),
 ) -> EmissionResponse:
     """
@@ -55,7 +91,8 @@ def calculate_emissions(
 
     The full derivation appears in `methodology_reference.resolution_chain`.
     """
-    result, replayed = controller.calculate(payload, idempotency_key=idempotency_key)
+    key = _normalize_idempotency_key(idempotency_key)
+    result, replayed = controller.calculate(payload, idempotency_key=key)
     if replayed:
         response.headers["Idempotent-Replayed"] = "true"
     return result
@@ -66,15 +103,22 @@ def calculate_emissions(
     response_model=BatchResponse,
     summary="Calculate emissions for up to 1000 shipments in one call",
     response_description="Per-item results with aggregate totals.",
+    responses=RESPONSES_BATCH,
 )
 def calculate_batch(
-    payload: BatchRequest,
+    payload: Annotated[
+        BatchRequest,
+        Body(openapi_examples=REQUEST_EXAMPLES_BATCH),
+    ],
     response: Response,
-    idempotency_key: str | None = Header(
-        default=None,
-        alias="Idempotency-Key",
-        description=_IDEMPOTENCY_HEADER_DESC,
-    ),
+    idempotency_key: Annotated[
+        str | None,
+        Header(
+            alias="Idempotency-Key",
+            description=_IDEMPOTENCY_HEADER_DESC,
+            examples=["batch-2026-q1-week14"],
+        ),
+    ] = None,
     controller: EmissionsController = Depends(get_controller),
 ) -> BatchResponse:
     """
@@ -83,7 +127,8 @@ def calculate_batch(
     cover only successful items; failed items appear in `items[]` with
     `status='error'` and a structured error payload.
     """
-    result, replayed = controller.calculate_batch(payload, idempotency_key=idempotency_key)
+    key = _normalize_idempotency_key(idempotency_key)
+    result, replayed = controller.calculate_batch(payload, idempotency_key=key)
     if replayed:
         response.headers["Idempotent-Replayed"] = "true"
     return result
@@ -93,6 +138,7 @@ def calculate_batch(
     "/modes",
     summary="List supported transport modes and sub-modes",
     response_model=dict[str, list[str]],
+    responses=RESPONSES_MODES,
 )
 def list_modes(
     controller: EmissionsController = Depends(get_controller),
@@ -104,6 +150,7 @@ def list_modes(
     "/fuels",
     summary="List fuels compatible with each transport mode",
     response_model=dict[str, list[str]],
+    responses=RESPONSES_FUELS,
 )
 def list_fuels(
     controller: EmissionsController = Depends(get_controller),
@@ -115,6 +162,7 @@ def list_fuels(
     "/regions",
     summary="List supported region codes and their grid factors (kgCO2e/kWh)",
     response_model=dict[str, float],
+    responses=RESPONSES_REGIONS,
 )
 def list_regions(
     controller: EmissionsController = Depends(get_controller),

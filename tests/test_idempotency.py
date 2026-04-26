@@ -124,3 +124,44 @@ class TestIdempotencyHTTP:
         b = client.post(CALC_URL, json=self._PAYLOAD)
         assert "Idempotent-Replayed" not in a.headers
         assert "Idempotent-Replayed" not in b.headers
+
+
+class TestJunkIdempotencyKeyNormalization:
+    """
+    Some HTTP playgrounds (RapidAPI's notably) send the literal string ``{}``
+    or ``null`` for unset optional headers. Without normalization, every
+    consecutive un-keyed call would 409 against the previous one. These tests
+    pin the contract: junk header values must be treated as if no key was set.
+    """
+
+    _PAYLOAD = {"weight_kg": 1000, "distance_km": 100, "transport_type": "truck"}
+
+    @pytest.mark.parametrize("junk", ["{}", "", "   ", "null", "NULL", "undefined", "None"])
+    def test_junk_header_values_do_not_engage_caching(
+        self, client: TestClient, junk: str
+    ) -> None:
+        # Two consecutive calls with the same junk header but different bodies
+        # would 409 if the junk were honored as a real key.
+        a = client.post(CALC_URL, json=self._PAYLOAD, headers={"Idempotency-Key": junk})
+        b = client.post(
+            CALC_URL,
+            json={**self._PAYLOAD, "weight_kg": 9999},
+            headers={"Idempotency-Key": junk},
+        )
+        assert a.status_code == 200
+        assert b.status_code == 200
+        assert "Idempotent-Replayed" not in a.headers
+        assert "Idempotent-Replayed" not in b.headers
+
+    def test_real_key_with_surrounding_whitespace_is_stripped_and_honored(
+        self, client: TestClient
+    ) -> None:
+        a = client.post(
+            CALC_URL, json=self._PAYLOAD, headers={"Idempotency-Key": "  k-trim-1  "}
+        )
+        b = client.post(
+            CALC_URL, json=self._PAYLOAD, headers={"Idempotency-Key": "k-trim-1"}
+        )
+        # Trimming means the second call hits the same cache entry.
+        assert b.headers.get("Idempotent-Replayed") == "true"
+        assert a.json()["calculated_at"] == b.json()["calculated_at"]
